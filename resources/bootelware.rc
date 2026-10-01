@@ -4,6 +4,9 @@
 // Application Icon
 IDI_APP_ICON ICON "app_icon.ico"
 
+// Embedded TrueType Font
+IDR_FONT_FREDOKA RCDATA "Fredoka.ttf"
+
 // Version Information
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     1,0,0,0

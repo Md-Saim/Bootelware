@@ -1,116 +1,143 @@
 #pragma once
 #include <windows.h>
-#include <dwmapi.h>
+#include <gdiplus.h>
 #include <string>
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-
 namespace Theme {
-    // ─── Premium Dark Color Palette ───
-    // Base backgrounds (deep blue-black tones, not pure gray)
-    const COLORREF BG_DARK         = RGB(13, 17, 23);       // GitHub-dark inspired base
-    const COLORREF BG_SURFACE      = RGB(22, 27, 34);       // Elevated surface
-    const COLORREF BG_DRAWER       = RGB(18, 22, 28);       // Drawer background
-    const COLORREF BG_CARD         = RGB(30, 36, 46);       // Card / Panel background
-    const COLORREF BG_SECTION      = RGB(26, 32, 40);       // Section header bg
-    const COLORREF BG_INPUT        = RGB(18, 22, 30);       // Input field bg
-    const COLORREF BG_HOVER        = RGB(36, 42, 54);       // Hover state bg
-
-    // Text
-    const COLORREF TEXT_PRIMARY    = RGB(240, 246, 252);     // High-contrast white
-    const COLORREF TEXT_SECONDARY  = RGB(139, 148, 158);     // Subdued gray-blue
-    const COLORREF TEXT_MUTED      = RGB(88, 96, 105);       // Dim muted
-    const COLORREF TEXT_LABEL      = RGB(201, 209, 217);     // Label text
-
-    // Accent colors
-    const COLORREF ACCENT_BLUE     = RGB(31, 111, 235);      // Vivid action blue
-    const COLORREF ACCENT_HOVER    = RGB(56, 132, 244);      // Blue hover
-    const COLORREF ACCENT_PRESSED  = RGB(23, 85, 190);       // Blue pressed
-    const COLORREF ACCENT_GREEN    = RGB(35, 197, 94);       // Emerald success
-    const COLORREF ACCENT_GREEN_DIM= RGB(22, 60, 42);        // Emerald background
-    const COLORREF ACCENT_CYAN     = RGB(56, 189, 248);      // Sky cyan for highlights
-    const COLORREF ACCENT_PURPLE   = RGB(163, 113, 247);     // Subtle purple accent
-    const COLORREF ACCENT_ORANGE   = RGB(255, 166, 87);      // Warm orange
-
-    // Banner
-    const COLORREF BANNER_BG       = RGB(14, 56, 42);        // Deep emerald
-    const COLORREF BANNER_BORDER   = RGB(35, 134, 92);       // Emerald border
-
-    // Warning / Danger
-    const COLORREF WARNING_BG      = RGB(66, 38, 12);        // Deep amber
-    const COLORREF WARNING_TEXT    = RGB(255, 202, 40);       // Amber text
-    const COLORREF WARNING_BORDER = RGB(180, 120, 30);       // Amber border
-    const COLORREF DANGER_BG       = RGB(56, 18, 18);        // Deep red
-    const COLORREF DANGER_TEXT     = RGB(248, 81, 73);        // Red text
-
-    // Borders & Dividers
-    const COLORREF BORDER_COLOR    = RGB(48, 54, 61);        // Standard border
-    const COLORREF BORDER_FOCUS    = RGB(31, 111, 235);      // Focus ring
-    const COLORREF BORDER_SUBTLE   = RGB(33, 38, 45);        // Very subtle divider
-
-    // Buttons
-    const COLORREF BTN_NORMAL      = RGB(33, 38, 48);        // Normal button
-    const COLORREF BTN_HOVER       = RGB(42, 48, 60);        // Hovered button
-    const COLORREF BTN_PRESSED     = RGB(24, 28, 36);        // Pressed button
-    const COLORREF BTN_START_BG    = RGB(21, 128, 61);       // Green START button
-    const COLORREF BTN_START_HOVER = RGB(34, 160, 80);       // START hover
-    const COLORREF BTN_DANGER_BG   = RGB(153, 27, 27);       // Destructive button
-
-    // Scrollbar / Progress
-    const COLORREF PROGRESS_BG     = RGB(22, 27, 34);        // Progress track
-    const COLORREF PROGRESS_FILL   = RGB(31, 111, 235);      // Progress bar fill
+    // ─── Playful Neo-Brutalist Color Palette ───
+    const COLORREF CLR_CANVAS       = RGB(236, 238, 248);     // Soft periwinkle canvas (#ECEEF8)
+    const COLORREF CLR_WHITE        = RGB(255, 255, 255);     // Card white
+    const COLORREF CLR_DARK         = RGB(24, 24, 36);        // Deep charcoal borders & text (#181824)
+    const COLORREF CLR_YELLOW       = RGB(254, 210, 50);      // Sunny yellow (#FED232)
+    const COLORREF CLR_YELLOW_HOVER = RGB(255, 224, 88);      // Light yellow hover
+    const COLORREF CLR_MINT         = RGB(111, 227, 180);     // Mint green (#6FE3B4)
+    const COLORREF CLR_MINT_HOVER   = RGB(135, 238, 196);     // Light mint hover
+    const COLORREF CLR_PURPLE       = RGB(107, 92, 231);      // Action purple (#6B5CE7)
+    const COLORREF CLR_PURPLE_HOVER = RGB(90, 75, 215);       // Deep action purple
+    const COLORREF CLR_MASCOT_PURPLE= RGB(124, 110, 230);     // Mascot purple (#7C6EE6)
+    const COLORREF CLR_MASCOT_GREEN = RGB(92, 225, 166);      // Mascot success green (#5CE1A6)
+    const COLORREF CLR_WARNING_BG   = RGB(255, 245, 192);     // Warning card yellow (#FFF5C0)
+    const COLORREF CLR_TEXT_SUBTITLE= RGB(85, 88, 112);       // Subtitle slate (#555870)
+    const COLORREF CLR_TEXT_MUTED   = RGB(142, 146, 168);     // Muted caption (#8E92A8)
+    const COLORREF CLR_CORAL        = RGB(255, 184, 184);     // Avatar coral (#FFB8B8)
+    const COLORREF CLR_HOVER_TINT   = RGB(245, 246, 253);     // Subtle white card hover
 
     class ThemeManager {
     public:
-        static void EnableDarkMode(HWND hWnd);
-        static void InitGDI();
-        static void CleanupGDI();
+        static void Init();
+        static void Shutdown();
 
-        // Rendering helpers
-        static void RenderModernButton(
-            LPDRAWITEMSTRUCT dis,
-            const std::wstring& text,
-            bool isAccent = false,
-            bool isDestructive = false,
-            bool isSmall = false
+        // GDI+ Drawing Helpers
+        static void DrawNeoPill(
+            Gdiplus::Graphics& g,
+            const Gdiplus::RectF& rc,
+            Gdiplus::Color fill,
+            Gdiplus::Color border = Gdiplus::Color(255, 24, 24, 36),
+            float borderWidth = 2.0f
         );
 
-        static void RenderStartButton(
-            LPDRAWITEMSTRUCT dis,
-            const std::wstring& text,
-            bool isDisabled = false
+        static void DrawNeoButton(
+            Gdiplus::Graphics& g,
+            const Gdiplus::RectF& rc,
+            const wchar_t* text,
+            Gdiplus::Color fill,
+            Gdiplus::Color textCol = Gdiplus::Color(255, 24, 24, 36),
+            bool isHovered = false,
+            bool isPressed = false,
+            Gdiplus::Font* pFont = nullptr,
+            float shadowOffset = 2.5f
         );
 
-        static void FillRoundedRect(HDC hdc, const RECT& rc, int radius, COLORREF fill, COLORREF border);
-        static void DrawGradientRect(HDC hdc, const RECT& rc, COLORREF top, COLORREF bottom);
-        static void DrawSectionHeader(HDC hdc, int x, int y, int w, const wchar_t* text);
-        static void DrawBadge(HDC hdc, int x, int y, const wchar_t* text, COLORREF bg, COLORREF border, COLORREF textCol, HFONT hFont = nullptr);
-        static void DrawCard(HDC hdc, const RECT& rc, const wchar_t* title, const wchar_t* badge = nullptr, COLORREF accentColor = ACCENT_BLUE);
-        static void RenderHeroButton(LPDRAWITEMSTRUCT dis, const std::wstring& text, bool isDisabled = false);
+        static void DrawNeoCard(
+            Gdiplus::Graphics& g,
+            const Gdiplus::RectF& rc,
+            Gdiplus::Color fill,
+            Gdiplus::Color border = Gdiplus::Color(255, 24, 24, 36),
+            float radius = 18.0f,
+            float borderWidth = 2.0f,
+            float shadowOffset = 0.0f
+        );
 
-        // GDI Objects
-        static HBRUSH hbrBackground;
-        static HBRUSH hbrSurface;
-        static HBRUSH hbrDrawer;
-        static HBRUSH hbrCard;
-        static HBRUSH hbrSection;
-        static HBRUSH hbrInput;
-        static HBRUSH hbrBanner;
+        static void DrawDashedCard(
+            Gdiplus::Graphics& g,
+            const Gdiplus::RectF& rc,
+            Gdiplus::Color fill,
+            Gdiplus::Color border = Gdiplus::Color(255, 24, 24, 36),
+            float radius = 18.0f,
+            float borderWidth = 2.0f
+        );
+
+        static void DrawMascot(
+            Gdiplus::Graphics& g,
+            float x,
+            float y,
+            float size,
+            bool isGreen = false,
+            int animTick = 0
+        );
+
+        static void DrawTargetBullseye(
+            Gdiplus::Graphics& g,
+            float cx,
+            float cy,
+            float radius
+        );
+
+        static void DrawUsbIcon(
+            Gdiplus::Graphics& g,
+            float x,
+            float y,
+            float size
+        );
+
+        static void DrawWarningTriangle(
+            Gdiplus::Graphics& g,
+            float cx,
+            float cy,
+            float size
+        );
+
+        static void DrawDevAvatar(
+            Gdiplus::Graphics& g,
+            float x,
+            float y,
+            float size
+        );
+
+        static void DrawCheckmark(
+            Gdiplus::Graphics& g,
+            float x,
+            float y,
+            float size,
+            Gdiplus::Color col,
+            float strokeWidth = 2.5f
+        );
+
+        // GDI+ Fonts
+        static Gdiplus::Font* fontTitle;
+        static Gdiplus::Font* fontLarge;
+        static Gdiplus::Font* fontHeading;
+        static Gdiplus::Font* fontSubtitle;
+        static Gdiplus::Font* fontBodyBold;
+        static Gdiplus::Font* fontBody;
+        static Gdiplus::Font* fontSmallBold;
+        static Gdiplus::Font* fontSmall;
+        static Gdiplus::Font* fontMono;
+
+        // GDI Brushes & Fonts for Windows standard controls
+        static HBRUSH hbrCanvas;
+        static HBRUSH hbrWhite;
+        static HBRUSH hbrDark;
+        static HBRUSH hbrYellow;
+        static HBRUSH hbrMint;
         static HBRUSH hbrWarning;
-        static HBRUSH hbrAccent;
 
-        // Fonts (expanded set)
-        static HFONT hFontTiny;
-        static HFONT hFontSmall;
         static HFONT hFontRegular;
-        static HFONT hFontMedium;
         static HFONT hFontBold;
         static HFONT hFontTitle;
-        static HFONT hFontLargeTitle;
-        static HFONT hFontHero;
         static HFONT hFontMono;
-        static HFONT hFontMonoSmall;
+
+    private:
+        static ULONG_PTR s_gdiplusToken;
     };
 }

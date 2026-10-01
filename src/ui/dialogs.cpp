@@ -17,8 +17,6 @@ static LRESULT CALLBACK Win11DlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
     switch (msg) {
     case WM_CREATE: {
-        Theme::ThemeManager::EnableDarkMode(hWnd);
-
         int y = 20;
         CreateWindowW(L"STATIC", L"Windows 11 Setup Customization", WS_CHILD | WS_VISIBLE, 20, y, 420, 24, hWnd, NULL, NULL, NULL);
         y += 35;
@@ -48,7 +46,6 @@ static LRESULT CALLBACK Win11DlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         hBtnOk = CreateWindowW(L"BUTTON", L"Save Options", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 230, y, 110, 32, hWnd, (HMENU)IDOK, NULL, NULL);
         hBtnCancel = CreateWindowW(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 350, y, 90, 32, hWnd, (HMENU)IDCANCEL, NULL, NULL);
 
-        // Apply fonts
         EnumChildWindows(hWnd, [](HWND hChild, LPARAM) -> BOOL {
             SendMessageW(hChild, WM_SETFONT, (WPARAM)Theme::ThemeManager::hFontRegular, TRUE);
             return TRUE;
@@ -81,21 +78,21 @@ static LRESULT CALLBACK Win11DlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_CARD);
-        return (LRESULT)Theme::ThemeManager::hbrCard;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_WHITE);
+        return (LRESULT)Theme::ThemeManager::hbrWhite;
     }
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_INPUT);
-        return (LRESULT)Theme::ThemeManager::hbrInput;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_WHITE);
+        return (LRESULT)Theme::ThemeManager::hbrWhite;
     }
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
         RECT rc;
         GetClientRect(hWnd, &rc);
-        FillRect(hdc, &rc, Theme::ThemeManager::hbrCard);
+        FillRect(hdc, &rc, Theme::ThemeManager::hbrCanvas);
         return 1;
     }
     case WM_CLOSE:
@@ -117,7 +114,7 @@ bool Dialogs::ShowWin11OptionsDialog(HWND hParent, Win11BypassOptions& inOutOpts
     wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"BootelwareWin11Dlg";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = Theme::ThemeManager::hbrCard;
+    wc.hbrBackground = Theme::ThemeManager::hbrCanvas;
     RegisterClassW(&wc);
 
     RECT parentRect;
@@ -163,8 +160,6 @@ static void ComputeChecksumsThread(HWND hWnd) {
 static LRESULT CALLBACK ChecksumDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
-        Theme::ThemeManager::EnableDarkMode(hWnd);
-
         int y = 15;
         CreateWindowW(L"STATIC", L"Computing cryptographic checksums for selected ISO...", WS_CHILD | WS_VISIBLE, 20, y, 480, 20, hWnd, NULL, NULL, NULL);
         y += 25;
@@ -234,7 +229,6 @@ static LRESULT CALLBACK ChecksumDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
                 SetWindowTextW(s_hLblMatch, L"✗ No Match");
             }
         } else if (id == 2002) {
-            // Copy to clipboard
             std::wstring all = L"MD5: " + s_checksumRes.md5 + L"\r\nSHA1: " + s_checksumRes.sha1 + 
                                L"\r\nSHA256: " + s_checksumRes.sha256 + L"\r\nSHA512: " + s_checksumRes.sha512;
             if (OpenClipboard(hWnd)) {
@@ -254,21 +248,21 @@ static LRESULT CALLBACK ChecksumDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     }
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_CARD);
-        return (LRESULT)Theme::ThemeManager::hbrCard;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_CANVAS);
+        return (LRESULT)Theme::ThemeManager::hbrCanvas;
     }
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_INPUT);
-        return (LRESULT)Theme::ThemeManager::hbrInput;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_WHITE);
+        return (LRESULT)Theme::ThemeManager::hbrWhite;
     }
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
         RECT rc;
         GetClientRect(hWnd, &rc);
-        FillRect(hdc, &rc, Theme::ThemeManager::hbrCard);
+        FillRect(hdc, &rc, Theme::ThemeManager::hbrCanvas);
         return 1;
     }
     case WM_CLOSE:
@@ -288,7 +282,7 @@ void Dialogs::ShowChecksumDialog(HWND hParent, const std::wstring& isoPath) {
     wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"BootelwareChecksumDlg";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = Theme::ThemeManager::hbrCard;
+    wc.hbrBackground = Theme::ThemeManager::hbrCanvas;
     RegisterClassW(&wc);
 
     RECT parentRect;
@@ -334,8 +328,6 @@ static HWND s_hListSources;
 static LRESULT CALLBACK DownloadDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
-        Theme::ThemeManager::EnableDarkMode(hWnd);
-
         CreateWindowW(L"STATIC", L"Select an official operating system distribution to download:", WS_CHILD | WS_VISIBLE, 20, 15, 480, 20, hWnd, NULL, NULL, NULL);
 
         s_hListSources = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", NULL, WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY, 20, 40, 480, 160, hWnd, (HMENU)3001, NULL, NULL);
@@ -367,21 +359,21 @@ static LRESULT CALLBACK DownloadDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     }
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_CARD);
-        return (LRESULT)Theme::ThemeManager::hbrCard;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_CANVAS);
+        return (LRESULT)Theme::ThemeManager::hbrCanvas;
     }
     case WM_CTLCOLORLISTBOX: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, Theme::TEXT_PRIMARY);
-        SetBkColor(hdc, Theme::BG_INPUT);
-        return (LRESULT)Theme::ThemeManager::hbrInput;
+        SetTextColor(hdc, Theme::CLR_DARK);
+        SetBkColor(hdc, Theme::CLR_WHITE);
+        return (LRESULT)Theme::ThemeManager::hbrWhite;
     }
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
         RECT rc;
         GetClientRect(hWnd, &rc);
-        FillRect(hdc, &rc, Theme::ThemeManager::hbrCard);
+        FillRect(hdc, &rc, Theme::ThemeManager::hbrCanvas);
         return 1;
     }
     case WM_CLOSE:
@@ -399,7 +391,7 @@ void Dialogs::ShowDownloadDialog(HWND hParent) {
     wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"BootelwareDownloadDlg";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = Theme::ThemeManager::hbrCard;
+    wc.hbrBackground = Theme::ThemeManager::hbrCanvas;
     RegisterClassW(&wc);
 
     RECT parentRect;

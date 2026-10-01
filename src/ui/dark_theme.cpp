@@ -1,306 +1,549 @@
 #include "dark_theme.h"
+#include <dwmapi.h>
+#include <math.h>
+#include "../resources/resource.h"
 
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "gdiplus.lib")
+
+using namespace Gdiplus;
 
 namespace Theme {
-    HBRUSH ThemeManager::hbrBackground = NULL;
-    HBRUSH ThemeManager::hbrSurface    = NULL;
-    HBRUSH ThemeManager::hbrDrawer     = NULL;
-    HBRUSH ThemeManager::hbrCard       = NULL;
-    HBRUSH ThemeManager::hbrSection    = NULL;
-    HBRUSH ThemeManager::hbrInput      = NULL;
-    HBRUSH ThemeManager::hbrBanner     = NULL;
-    HBRUSH ThemeManager::hbrWarning    = NULL;
-    HBRUSH ThemeManager::hbrAccent     = NULL;
+    ULONG_PTR ThemeManager::s_gdiplusToken = 0;
+    static PrivateFontCollection s_fontCollection;
+    static HANDLE s_hFontMem = NULL;
+    static FontFamily* s_pFredokaFamily = nullptr;
 
-    HFONT ThemeManager::hFontTiny       = NULL;
-    HFONT ThemeManager::hFontSmall      = NULL;
-    HFONT ThemeManager::hFontRegular    = NULL;
-    HFONT ThemeManager::hFontMedium     = NULL;
-    HFONT ThemeManager::hFontBold       = NULL;
-    HFONT ThemeManager::hFontTitle      = NULL;
-    HFONT ThemeManager::hFontLargeTitle = NULL;
-    HFONT ThemeManager::hFontHero       = NULL;
-    HFONT ThemeManager::hFontMono       = NULL;
-    HFONT ThemeManager::hFontMonoSmall  = NULL;
+    Font* ThemeManager::fontTitle     = nullptr;
+    Font* ThemeManager::fontLarge     = nullptr;
+    Font* ThemeManager::fontHeading   = nullptr;
+    Font* ThemeManager::fontSubtitle  = nullptr;
+    Font* ThemeManager::fontBodyBold  = nullptr;
+    Font* ThemeManager::fontBody      = nullptr;
+    Font* ThemeManager::fontSmallBold = nullptr;
+    Font* ThemeManager::fontSmall     = nullptr;
+    Font* ThemeManager::fontMono      = nullptr;
 
-    void ThemeManager::EnableDarkMode(HWND hWnd) {
-        BOOL darkMode = TRUE;
-        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
+    HBRUSH ThemeManager::hbrCanvas    = NULL;
+    HBRUSH ThemeManager::hbrWhite     = NULL;
+    HBRUSH ThemeManager::hbrDark      = NULL;
+    HBRUSH ThemeManager::hbrYellow    = NULL;
+    HBRUSH ThemeManager::hbrMint      = NULL;
+    HBRUSH ThemeManager::hbrWarning   = NULL;
+
+    HFONT ThemeManager::hFontRegular  = NULL;
+    HFONT ThemeManager::hFontBold     = NULL;
+    HFONT ThemeManager::hFontTitle    = NULL;
+    HFONT ThemeManager::hFontMono     = NULL;
+
+    void ThemeManager::Init() {
+        GdiplusStartupInput gdiplusStartupInput;
+        GdiplusStartup(&s_gdiplusToken, &gdiplusStartupInput, NULL);
+
+        // 1. Try loading Fredoka from embedded resource IDR_FONT_FREDOKA
+        HRSRC hRes = FindResourceW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDR_FONT_FREDOKA), MAKEINTRESOURCEW(10));
+        if (hRes) {
+            HGLOBAL hMem = LoadResource(GetModuleHandleW(NULL), hRes);
+            void* pData = LockResource(hMem);
+            DWORD len = SizeofResource(GetModuleHandleW(NULL), hRes);
+            if (pData && len > 0) {
+                DWORD numFonts = 0;
+                s_hFontMem = AddFontMemResourceEx(pData, len, NULL, &numFonts);
+                s_fontCollection.AddMemoryFont(pData, len);
+            }
+        }
+
+        // 2. Also try loading from disk if not yet loaded
+        if (s_fontCollection.GetFamilyCount() == 0) {
+            if (GetFileAttributesW(L"assets\\fonts\\Fredoka.ttf") != INVALID_FILE_ATTRIBUTES) {
+                AddFontResourceExW(L"assets\\fonts\\Fredoka.ttf", FR_PRIVATE, 0);
+                s_fontCollection.AddFontFile(L"assets\\fonts\\Fredoka.ttf");
+            } else if (GetFileAttributesW(L"resources\\Fredoka.ttf") != INVALID_FILE_ATTRIBUTES) {
+                AddFontResourceExW(L"resources\\Fredoka.ttf", FR_PRIVATE, 0);
+                s_fontCollection.AddFontFile(L"resources\\Fredoka.ttf");
+            }
+        }
+
+        // 3. Resolve FontFamily (Fredoka or system fallback)
+        const FontFamily* pFam = nullptr;
+        if (s_fontCollection.GetFamilyCount() > 0) {
+            int count = s_fontCollection.GetFamilyCount();
+            FontFamily* families = new FontFamily[count];
+            int found = 0;
+            s_fontCollection.GetFamilies(count, families, &found);
+            if (found > 0) {
+                s_pFredokaFamily = families[0].Clone();
+                pFam = s_pFredokaFamily;
+            }
+            delete[] families;
+        }
+
+        if (!pFam || pFam->GetLastStatus() != Ok) {
+            static FontFamily tryFredoka(L"Fredoka");
+            if (tryFredoka.GetLastStatus() == Ok) {
+                pFam = &tryFredoka;
+            } else {
+                static FontFamily fallbackFont(L"Segoe UI");
+                pFam = (fallbackFont.GetLastStatus() == Ok) ? &fallbackFont : FontFamily::GenericSansSerif();
+            }
+        }
+
+        const FontFamily* pMono = FontFamily::GenericMonospace();
+
+        // Fredoka Font Hierarchy (Weights 400 to 700)
+        fontTitle     = new Font(pFam, 22.0f, FontStyleBold, UnitPixel);
+        fontLarge     = new Font(pFam, 16.5f, FontStyleBold, UnitPixel);
+        fontHeading   = new Font(pFam, 14.5f, FontStyleBold, UnitPixel);
+        fontSubtitle  = new Font(pFam, 12.5f, FontStyleRegular, UnitPixel);
+        fontBodyBold  = new Font(pFam, 12.0f, FontStyleBold, UnitPixel);
+        fontBody      = new Font(pFam, 11.5f, FontStyleRegular, UnitPixel);
+        fontSmallBold = new Font(pFam, 10.0f, FontStyleBold, UnitPixel);
+        fontSmall     = new Font(pFam, 9.5f,  FontStyleRegular, UnitPixel);
+        fontMono      = new Font(pMono, 10.0f, FontStyleRegular, UnitPixel);
+
+        // GDI objects
+        hbrCanvas  = CreateSolidBrush(CLR_CANVAS);
+        hbrWhite   = CreateSolidBrush(CLR_WHITE);
+        hbrDark    = CreateSolidBrush(CLR_DARK);
+        hbrYellow  = CreateSolidBrush(CLR_YELLOW);
+        hbrMint    = CreateSolidBrush(CLR_MINT);
+        hbrWarning = CreateSolidBrush(CLR_WARNING_BG);
+
+        const wchar_t* primaryFont = L"Fredoka";
+        hFontRegular = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, primaryFont);
+        hFontBold    = CreateFontW(-14, 0, 0, 0, FW_BOLD,   FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, primaryFont);
+        hFontTitle   = CreateFontW(-24, 0, 0, 0, FW_BOLD,   FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, primaryFont);
+        hFontMono    = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
     }
 
-    void ThemeManager::InitGDI() {
-        if (!hbrBackground) {
-            hbrBackground = CreateSolidBrush(BG_DARK);
-            hbrSurface    = CreateSolidBrush(BG_SURFACE);
-            hbrDrawer     = CreateSolidBrush(BG_DRAWER);
-            hbrCard       = CreateSolidBrush(BG_CARD);
-            hbrSection    = CreateSolidBrush(BG_SECTION);
-            hbrInput      = CreateSolidBrush(BG_INPUT);
-            hbrBanner     = CreateSolidBrush(BANNER_BG);
-            hbrWarning    = CreateSolidBrush(WARNING_BG);
-            hbrAccent     = CreateSolidBrush(ACCENT_BLUE);
+    void ThemeManager::Shutdown() {
+        delete fontTitle;
+        delete fontLarge;
+        delete fontHeading;
+        delete fontSubtitle;
+        delete fontBodyBold;
+        delete fontBody;
+        delete fontSmallBold;
+        delete fontSmall;
+        delete fontMono;
 
-            // Segoe UI Variable is available on Win11, fallback to Segoe UI
-            const wchar_t* uiFont = L"Segoe UI";
-            const wchar_t* monoFont = L"Cascadia Mono";
+        if (s_pFredokaFamily) {
+            delete s_pFredokaFamily;
+            s_pFredokaFamily = nullptr;
+        }
 
-            hFontTiny       = CreateFontW(-10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontSmall      = CreateFontW(-11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontRegular    = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontMedium     = CreateFontW(-13, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontBold       = CreateFontW(-13, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontTitle      = CreateFontW(-16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontLargeTitle = CreateFontW(-20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontHero       = CreateFontW(-26, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, uiFont);
-            hFontMono       = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, monoFont);
-            hFontMonoSmall  = CreateFontW(-10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, monoFont);
+        if (hbrCanvas)  DeleteObject(hbrCanvas);
+        if (hbrWhite)   DeleteObject(hbrWhite);
+        if (hbrDark)    DeleteObject(hbrDark);
+        if (hbrYellow)  DeleteObject(hbrYellow);
+        if (hbrMint)    DeleteObject(hbrMint);
+        if (hbrWarning) DeleteObject(hbrWarning);
+
+        if (hFontRegular) DeleteObject(hFontRegular);
+        if (hFontBold)    DeleteObject(hFontBold);
+        if (hFontTitle)   DeleteObject(hFontTitle);
+        if (hFontMono)    DeleteObject(hFontMono);
+
+        if (s_hFontMem) {
+            RemoveFontMemResourceEx(s_hFontMem);
+            s_hFontMem = NULL;
+        }
+
+        if (s_gdiplusToken) {
+            GdiplusShutdown(s_gdiplusToken);
+            s_gdiplusToken = 0;
         }
     }
 
-    void ThemeManager::CleanupGDI() {
-        HGDIOBJ* objs[] = {
-            (HGDIOBJ*)&hbrBackground, (HGDIOBJ*)&hbrSurface, (HGDIOBJ*)&hbrDrawer,
-            (HGDIOBJ*)&hbrCard, (HGDIOBJ*)&hbrSection, (HGDIOBJ*)&hbrInput,
-            (HGDIOBJ*)&hbrBanner, (HGDIOBJ*)&hbrWarning, (HGDIOBJ*)&hbrAccent,
-            (HGDIOBJ*)&hFontTiny, (HGDIOBJ*)&hFontSmall, (HGDIOBJ*)&hFontRegular,
-            (HGDIOBJ*)&hFontMedium, (HGDIOBJ*)&hFontBold, (HGDIOBJ*)&hFontTitle,
-            (HGDIOBJ*)&hFontLargeTitle, (HGDIOBJ*)&hFontHero,
-            (HGDIOBJ*)&hFontMono, (HGDIOBJ*)&hFontMonoSmall
+    void ThemeManager::DrawNeoPill(
+        Graphics& g,
+        const RectF& rc,
+        Color fill,
+        Color border,
+        float borderWidth
+    ) {
+        float r = rc.Height / 2.0f;
+        if (r > rc.Width / 2.0f) r = rc.Width / 2.0f;
+        float d = r * 2.0f;
+
+        GraphicsPath path;
+        path.AddArc(rc.X, rc.Y, d, d, 90.0f, 180.0f);
+        path.AddArc(rc.X + rc.Width - d, rc.Y, d, d, 270.0f, 180.0f);
+        path.CloseFigure();
+
+        SolidBrush brush(fill);
+        g.FillPath(&brush, &path);
+
+        if (borderWidth > 0.0f) {
+            Pen pen(border, borderWidth);
+            g.DrawPath(&pen, &path);
+        }
+    }
+
+    void ThemeManager::DrawNeoButton(
+        Graphics& g,
+        const RectF& rc,
+        const wchar_t* text,
+        Color fill,
+        Color textCol,
+        bool isHovered,
+        bool isPressed,
+        Font* pFont,
+        float shadowOffset
+    ) {
+        if (!pFont) pFont = fontBodyBold;
+        Color darkLine(255, 24, 24, 36);
+
+        float off = shadowOffset;
+        if (isPressed) {
+            off = 0.5f;
+        } else if (isHovered) {
+            off = shadowOffset + 0.8f;
+        }
+
+        // Draw shadow pill underneath if offset > 0
+        if (off > 0.6f) {
+            RectF shadowRc(rc.X, rc.Y + off, rc.Width, rc.Height);
+            DrawNeoPill(g, shadowRc, darkLine, darkLine, 1.0f);
+        }
+
+        // Button face position (shifts down on press)
+        float shiftY = isPressed ? off : 0.0f;
+        RectF btnRc(rc.X, rc.Y + shiftY, rc.Width, rc.Height);
+
+        DrawNeoPill(g, btnRc, fill, darkLine, 2.0f);
+
+        StringFormat sf;
+        sf.SetAlignment(StringAlignmentCenter);
+        sf.SetLineAlignment(StringAlignmentCenter);
+        sf.SetFormatFlags(StringFormatFlagsNoWrap);
+        SolidBrush tBrush(textCol);
+        g.DrawString(text, -1, pFont, btnRc, &sf, &tBrush);
+    }
+
+    void ThemeManager::DrawNeoCard(
+        Graphics& g,
+        const RectF& rc,
+        Color fill,
+        Color border,
+        float radius,
+        float borderWidth,
+        float shadowOffset
+    ) {
+        if (shadowOffset > 0.5f) {
+            RectF shadowRc(rc.X, rc.Y + shadowOffset, rc.Width, rc.Height);
+            DrawNeoCard(g, shadowRc, border, border, radius, 1.0f, 0.0f);
+        }
+
+        float d = radius * 2.0f;
+        if (d > rc.Width) d = rc.Width;
+        if (d > rc.Height) d = rc.Height;
+
+        GraphicsPath path;
+        path.AddArc(rc.X, rc.Y, d, d, 180.0f, 90.0f);
+        path.AddArc(rc.X + rc.Width - d, rc.Y, d, d, 270.0f, 90.0f);
+        path.AddArc(rc.X + rc.Width - d, rc.Y + rc.Height - d, d, d, 0.0f, 90.0f);
+        path.AddArc(rc.X, rc.Y + rc.Height - d, d, d, 90.0f, 90.0f);
+        path.CloseFigure();
+
+        SolidBrush brush(fill);
+        g.FillPath(&brush, &path);
+
+        if (borderWidth > 0.0f) {
+            Pen pen(border, borderWidth);
+            g.DrawPath(&pen, &path);
+        }
+    }
+
+    void ThemeManager::DrawDashedCard(
+        Graphics& g,
+        const RectF& rc,
+        Color fill,
+        Color border,
+        float radius,
+        float borderWidth
+    ) {
+        float d = radius * 2.0f;
+        if (d > rc.Width) d = rc.Width;
+        if (d > rc.Height) d = rc.Height;
+
+        GraphicsPath path;
+        path.AddArc(rc.X, rc.Y, d, d, 180.0f, 90.0f);
+        path.AddArc(rc.X + rc.Width - d, rc.Y, d, d, 270.0f, 90.0f);
+        path.AddArc(rc.X + rc.Width - d, rc.Y + rc.Height - d, d, d, 0.0f, 90.0f);
+        path.AddArc(rc.X, rc.Y + rc.Height - d, d, d, 90.0f, 90.0f);
+        path.CloseFigure();
+
+        SolidBrush brush(fill);
+        g.FillPath(&brush, &path);
+
+        if (borderWidth > 0.0f) {
+            Pen pen(border, borderWidth);
+            pen.SetDashStyle(DashStyleDash);
+            REAL dashPattern[2] = { 4.0f, 3.0f };
+            pen.SetDashPattern(dashPattern, 2);
+            g.DrawPath(&pen, &path);
+        }
+    }
+
+    void ThemeManager::DrawMascot(
+        Graphics& g,
+        float x,
+        float y,
+        float size,
+        bool isGreen,
+        int animTick
+    ) {
+        float scale = size / 100.0f;
+        Color darkLine(255, 24, 24, 36);
+        Pen darkPen(darkLine, 2.0f * scale);
+        SolidBrush darkBrush(darkLine);
+
+        // Animation dynamics
+        float bobY = 0.0f;
+        float capTilt = 0.0f;
+        bool isBlinking = false;
+        if (animTick > 0) {
+            if (isGreen) {
+                // Celebration bounce
+                bobY = -fabsf(sinf(animTick * 0.12f)) * (5.5f * scale);
+            } else {
+                // Gentle floating hover
+                bobY = sinf(animTick * 0.09f) * (3.5f * scale);
+            }
+            capTilt = sinf(animTick * 0.12f) * (1.8f * scale);
+
+            // Natural eye blinking cycle
+            int blinkCycle = animTick % 110;
+            if (blinkCycle >= 92 && blinkCycle <= 100) {
+                isBlinking = true;
+            }
+        }
+        y += bobY;
+
+        // Cap (Yellow USB plug on top)
+        float capW = 34.0f * scale;
+        float capH = 17.0f * scale;
+        float capX = x + (size - capW) / 2.0f + capTilt;
+        float capY = y + 8.0f * scale;
+        float capR = 5.0f * scale;
+
+        GraphicsPath capPath;
+        capPath.AddArc(capX, capY, capR * 2, capR * 2, 180, 90);
+        capPath.AddArc(capX + capW - capR * 2, capY, capR * 2, capR * 2, 270, 90);
+        capPath.AddLine(capX + capW, capY + capH, capX, capY + capH);
+        capPath.CloseFigure();
+
+        SolidBrush yellowBrush(Color(255, 254, 210, 50));
+        g.FillPath(&yellowBrush, &capPath);
+        g.DrawPath(&darkPen, &capPath);
+
+        // Cap inner notches
+        float notchW = 4.5f * scale;
+        float notchH = 5.5f * scale;
+        g.FillRectangle(&darkBrush, RectF(capX + 6.0f * scale, capY + 4.5f * scale, notchW, notchH));
+        g.FillRectangle(&darkBrush, RectF(capX + capW - 6.0f * scale - notchW, capY + 4.5f * scale, notchW, notchH));
+
+        // Head (Purple or Mint Green)
+        float headW = 76.0f * scale;
+        float headH = 68.0f * scale;
+        float headX = x + (size - headW) / 2.0f;
+        float headY = y + 21.0f * scale;
+        float headR = 18.0f * scale;
+
+        GraphicsPath headPath;
+        headPath.AddArc(headX, headY, headR * 2, headR * 2, 180, 90);
+        headPath.AddArc(headX + headW - headR * 2, headY, headR * 2, headR * 2, 270, 90);
+        headPath.AddArc(headX + headW - headR * 2, headY + headH - headR * 2, headR * 2, headR * 2, 0, 90);
+        headPath.AddArc(headX, headY + headH - headR * 2, headR * 2, headR * 2, 90, 90);
+        headPath.CloseFigure();
+
+        Color headColor = isGreen ? Color(255, 92, 225, 166) : Color(255, 124, 110, 230);
+        SolidBrush headBrush(headColor);
+        g.FillPath(&headBrush, &headPath);
+        g.DrawPath(&darkPen, &headPath);
+
+        // Cheeks blush
+        SolidBrush blushBrush(Color(65, 255, 100, 150));
+        g.FillEllipse(&blushBrush, RectF(headX + 5.0f * scale, headY + headH * 0.58f, 10.0f * scale, 6.0f * scale));
+        g.FillEllipse(&blushBrush, RectF(headX + headW - 15.0f * scale, headY + headH * 0.58f, 10.0f * scale, 6.0f * scale));
+
+        // Eyes
+        float eyeY = headY + 30.0f * scale;
+        float eyeLX = headX + 22.0f * scale;
+        float eyeRX = headX + headW - 22.0f * scale;
+        float eyeR = 5.0f * scale;
+
+        if (isGreen || isBlinking) {
+            // Happy curved smiling eyes ^ ^
+            Pen eyeArcPen(darkLine, 2.4f * scale);
+            eyeArcPen.SetStartCap(LineCapRound);
+            eyeArcPen.SetEndCap(LineCapRound);
+            g.DrawArc(&eyeArcPen, RectF(eyeLX - eyeR, eyeY - eyeR * 0.6f, eyeR * 2, eyeR * 1.6f), 200, 140);
+            g.DrawArc(&eyeArcPen, RectF(eyeRX - eyeR, eyeY - eyeR * 0.6f, eyeR * 2, eyeR * 1.6f), 200, 140);
+        } else {
+            // Cute round dark eyes with specular shine
+            g.FillEllipse(&darkBrush, RectF(eyeLX - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2));
+            g.FillEllipse(&darkBrush, RectF(eyeRX - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2));
+
+            SolidBrush whiteBrush(Color(255, 255, 255, 255));
+            float shineR = 1.6f * scale;
+            g.FillEllipse(&whiteBrush, RectF(eyeLX - shineR + 1.2f * scale, eyeY - shineR - 1.2f * scale, shineR * 2, shineR * 2));
+            g.FillEllipse(&whiteBrush, RectF(eyeRX - shineR + 1.2f * scale, eyeY - shineR - 1.2f * scale, shineR * 2, shineR * 2));
+        }
+
+        // Smile
+        Pen smilePen(darkLine, 2.2f * scale);
+        smilePen.SetStartCap(LineCapRound);
+        smilePen.SetEndCap(LineCapRound);
+        float smileW = 16.0f * scale;
+        float smileH = 13.0f * scale;
+        g.DrawArc(&smilePen, RectF(headX + (headW - smileW) / 2.0f, eyeY + 4.0f * scale, smileW, smileH), 20, 140);
+    }
+
+    void ThemeManager::DrawTargetBullseye(
+        Graphics& g,
+        float cx,
+        float cy,
+        float radius
+    ) {
+        Color darkLine(255, 24, 24, 36);
+        Pen darkPen(darkLine, 2.2f);
+        SolidBrush darkBrush(darkLine);
+
+        // Outer circle
+        g.DrawEllipse(&darkPen, RectF(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f));
+
+        // Yellow middle disc
+        float midR = radius * 0.65f;
+        SolidBrush yellowBrush(Color(255, 254, 210, 50));
+        g.FillEllipse(&yellowBrush, RectF(cx - midR, cy - midR, midR * 2.0f, midR * 2.0f));
+        g.DrawEllipse(&darkPen, RectF(cx - midR, cy - midR, midR * 2.0f, midR * 2.0f));
+
+        // Center dot
+        float dotR = radius * 0.22f;
+        g.FillEllipse(&darkBrush, RectF(cx - dotR, cy - dotR, dotR * 2.0f, dotR * 2.0f));
+    }
+
+    void ThemeManager::DrawUsbIcon(
+        Graphics& g,
+        float x,
+        float y,
+        float size
+    ) {
+        float scale = size / 32.0f;
+        Color darkLine(255, 24, 24, 36);
+        Pen darkPen(darkLine, 2.0f * scale);
+        SolidBrush whiteBrush(Color(255, 255, 255, 255));
+        SolidBrush darkBrush(darkLine);
+
+        // Body of USB stick
+        float bodyW = 16.0f * scale;
+        float bodyH = 22.0f * scale;
+        float bodyX = x + (size - bodyW) / 2.0f;
+        float bodyY = y + 8.0f * scale;
+
+        GraphicsPath bodyPath;
+        float r = 3.0f * scale;
+        bodyPath.AddArc(bodyX, bodyY, r*2, r*2, 180, 90);
+        bodyPath.AddArc(bodyX + bodyW - r*2, bodyY, r*2, r*2, 270, 90);
+        bodyPath.AddArc(bodyX + bodyW - r*2, bodyY + bodyH - r*2, r*2, r*2, 0, 90);
+        bodyPath.AddArc(bodyX, bodyY + bodyH - r*2, r*2, r*2, 90, 90);
+        bodyPath.CloseFigure();
+        g.FillPath(&whiteBrush, &bodyPath);
+        g.DrawPath(&darkPen, &bodyPath);
+
+        // Connector on top
+        float connW = 10.0f * scale;
+        float connH = 7.0f * scale;
+        float connX = x + (size - connW) / 2.0f;
+        float connY = y + 2.0f * scale;
+        g.DrawRectangle(&darkPen, RectF(connX, connY, connW, connH));
+
+        // Connector pins
+        g.FillRectangle(&darkBrush, RectF(connX + 2.0f * scale, connY + 2.0f * scale, 2.0f * scale, 3.0f * scale));
+        g.FillRectangle(&darkBrush, RectF(connX + connW - 4.0f * scale, connY + 2.0f * scale, 2.0f * scale, 3.0f * scale));
+
+        // Body center notch
+        g.DrawLine(&darkPen, PointF(bodyX + 4.0f * scale, bodyY + 8.0f * scale), PointF(bodyX + bodyW - 4.0f * scale, bodyY + 8.0f * scale));
+    }
+
+    void ThemeManager::DrawWarningTriangle(
+        Graphics& g,
+        float cx,
+        float cy,
+        float size
+    ) {
+        Color darkLine(255, 24, 24, 36);
+        Pen darkPen(darkLine, 2.0f);
+        SolidBrush darkBrush(darkLine);
+
+        float h = size * 0.866f;
+        PointF pts[3] = {
+            PointF(cx, cy - h / 2.0f),
+            PointF(cx - size / 2.0f, cy + h / 2.0f),
+            PointF(cx + size / 2.0f, cy + h / 2.0f)
         };
-        for (auto* p : objs) {
-            if (*p) { DeleteObject(*p); *p = NULL; }
-        }
+
+        g.DrawPolygon(&darkPen, pts, 3);
+
+        // Exclamation mark
+        Pen exPen(darkLine, 2.0f);
+        g.DrawLine(&exPen, PointF(cx, cy - h / 5.0f), PointF(cx, cy + h / 6.0f));
+        g.FillEllipse(&darkBrush, RectF(cx - 1.2f, cy + h / 3.0f - 1.2f, 2.4f, 2.4f));
     }
 
-    void ThemeManager::FillRoundedRect(HDC hdc, const RECT& rc, int radius, COLORREF fill, COLORREF border) {
-        HBRUSH hBrush = CreateSolidBrush(fill);
-        HPEN hPen = CreatePen(PS_SOLID, 1, border);
-        HGDIOBJ oldBrush = SelectObject(hdc, hBrush);
-        HGDIOBJ oldPen = SelectObject(hdc, hPen);
-        RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
-        SelectObject(hdc, oldBrush);
-        SelectObject(hdc, oldPen);
-        DeleteObject(hBrush);
-        DeleteObject(hPen);
-    }
-
-    void ThemeManager::DrawGradientRect(HDC hdc, const RECT& rc, COLORREF top, COLORREF bottom) {
-        TRIVERTEX vertices[2];
-        vertices[0].x = rc.left;
-        vertices[0].y = rc.top;
-        vertices[0].Red   = (COLOR16)(GetRValue(top) << 8);
-        vertices[0].Green = (COLOR16)(GetGValue(top) << 8);
-        vertices[0].Blue  = (COLOR16)(GetBValue(top) << 8);
-        vertices[0].Alpha = 0;
-
-        vertices[1].x = rc.right;
-        vertices[1].y = rc.bottom;
-        vertices[1].Red   = (COLOR16)(GetRValue(bottom) << 8);
-        vertices[1].Green = (COLOR16)(GetGValue(bottom) << 8);
-        vertices[1].Blue  = (COLOR16)(GetBValue(bottom) << 8);
-        vertices[1].Alpha = 0;
-
-        GRADIENT_RECT gRect = { 0, 1 };
-        GradientFill(hdc, vertices, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
-    }
-
-    void ThemeManager::DrawSectionHeader(HDC hdc, int x, int y, int w, const wchar_t* text) {
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, TEXT_LABEL);
-        SelectObject(hdc, hFontMedium);
-        TextOutW(hdc, x, y, text, (int)wcslen(text));
-
-        // Draw a subtle line after the text
-        SIZE sz;
-        GetTextExtentPoint32W(hdc, text, (int)wcslen(text), &sz);
-        HPEN hPen = CreatePen(PS_SOLID, 1, BORDER_SUBTLE);
-        HGDIOBJ oldPen = SelectObject(hdc, hPen);
-        MoveToEx(hdc, x + sz.cx + 8, y + sz.cy / 2, NULL);
-        LineTo(hdc, x + w, y + sz.cy / 2);
-        SelectObject(hdc, oldPen);
-        DeleteObject(hPen);
-    }
-
-    void ThemeManager::RenderModernButton(
-        LPDRAWITEMSTRUCT dis,
-        const std::wstring& text,
-        bool isAccent,
-        bool isDestructive,
-        bool isSmall
+    void ThemeManager::DrawDevAvatar(
+        Graphics& g,
+        float x,
+        float y,
+        float size
     ) {
-        HDC hdc = dis->hDC;
-        RECT rc = dis->rcItem;
-        bool isPressed = (dis->itemState & ODS_SELECTED) != 0;
-        bool isFocused = (dis->itemState & ODS_FOCUS) != 0;
-        bool isDisabled = (dis->itemState & ODS_DISABLED) != 0;
+        Color darkLine(255, 24, 24, 36);
+        Pen darkPen(darkLine, 2.0f);
+        SolidBrush coralBrush(Color(255, 255, 184, 184));
+        SolidBrush darkBrush(darkLine);
 
-        COLORREF fillColor = BTN_NORMAL;
-        COLORREF borderColor = BORDER_COLOR;
-        COLORREF textColor = TEXT_PRIMARY;
+        // Circular background
+        g.FillEllipse(&coralBrush, RectF(x, y, size, size));
+        g.DrawEllipse(&darkPen, RectF(x, y, size, size));
 
-        if (isDisabled) {
-            fillColor = BG_CARD;
-            borderColor = BORDER_SUBTLE;
-            textColor = TEXT_MUTED;
-        } else if (isAccent) {
-            fillColor = isPressed ? ACCENT_PRESSED : ACCENT_BLUE;
-            borderColor = isPressed ? ACCENT_BLUE : ACCENT_HOVER;
-            textColor = RGB(255, 255, 255);
-        } else if (isDestructive) {
-            fillColor = isPressed ? RGB(120, 20, 20) : BTN_NORMAL;
-            borderColor = isPressed ? DANGER_TEXT : BORDER_COLOR;
-            textColor = isPressed ? RGB(255, 255, 255) : DANGER_TEXT;
-        } else if (isPressed) {
-            fillColor = BTN_PRESSED;
-            borderColor = ACCENT_BLUE;
-            textColor = TEXT_PRIMARY;
-        } else if (isFocused) {
-            borderColor = ACCENT_BLUE;
-        }
+        // Face & hair sketch
+        float scale = size / 64.0f;
+        SolidBrush skinBrush(Color(255, 255, 224, 189));
+        g.FillEllipse(&skinBrush, RectF(x + 19.0f * scale, y + 21.0f * scale, 26.0f * scale, 28.0f * scale));
+        g.DrawEllipse(&darkPen, RectF(x + 19.0f * scale, y + 21.0f * scale, 26.0f * scale, 28.0f * scale));
 
-        // Draw rounded button background
-        FillRoundedRect(hdc, rc, 6, fillColor, borderColor);
+        // Hair arc
+        Pen hairPen(darkLine, 4.0f * scale);
+        g.DrawArc(&hairPen, RectF(x + 17.0f * scale, y + 13.0f * scale, 30.0f * scale, 20.0f * scale), 160, 220);
 
-        // Draw button text
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, textColor);
-        SelectObject(hdc, isSmall ? hFontSmall : hFontMedium);
+        // Eyes
+        g.FillEllipse(&darkBrush, RectF(x + 24.0f * scale, y + 30.0f * scale, 3.0f * scale, 3.0f * scale));
+        g.FillEllipse(&darkBrush, RectF(x + 37.0f * scale, y + 30.0f * scale, 3.0f * scale, 3.0f * scale));
 
-        RECT textRc = rc;
-        if (isPressed) {
-            OffsetRect(&textRc, 0, 1);
-        }
-
-        DrawTextW(hdc, text.c_str(), -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        // Smile
+        Pen smilePen(darkLine, 1.8f * scale);
+        g.DrawArc(&smilePen, RectF(x + 27.0f * scale, y + 36.0f * scale, 10.0f * scale, 6.0f * scale), 20, 140);
     }
 
-    void ThemeManager::RenderStartButton(
-        LPDRAWITEMSTRUCT dis,
-        const std::wstring& text,
-        bool isDisabled
+    void ThemeManager::DrawCheckmark(
+        Graphics& g,
+        float x,
+        float y,
+        float size,
+        Color col,
+        float strokeWidth
     ) {
-        HDC hdc = dis->hDC;
-        RECT rc = dis->rcItem;
-        bool isPressed = (dis->itemState & ODS_SELECTED) != 0;
+        Pen pen(col, strokeWidth);
+        pen.SetStartCap(LineCapRound);
+        pen.SetEndCap(LineCapRound);
 
-        COLORREF fillColor, borderColor, textColor;
+        PointF p1(x, y + size * 0.5f);
+        PointF p2(x + size * 0.38f, y + size * 0.88f);
+        PointF p3(x + size, y + size * 0.12f);
 
-        if (isDisabled) {
-            fillColor = BG_CARD;
-            borderColor = BORDER_SUBTLE;
-            textColor = TEXT_MUTED;
-        } else {
-            fillColor = isPressed ? RGB(16, 100, 48) : BTN_START_BG;
-            borderColor = isPressed ? ACCENT_GREEN : BTN_START_HOVER;
-            textColor = RGB(255, 255, 255);
-        }
-
-        FillRoundedRect(hdc, rc, 8, fillColor, borderColor);
-
-        // Subtle glow effect for enabled start button
-        if (!isDisabled && !isPressed) {
-            HPEN hGlow = CreatePen(PS_SOLID, 1, ACCENT_GREEN);
-            HGDIOBJ oldPen = SelectObject(hdc, hGlow);
-            SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            RECT inner = { rc.left + 1, rc.top + 1, rc.right - 1, rc.bottom - 1 };
-            RoundRect(hdc, inner.left, inner.top, inner.right, inner.bottom, 7, 7);
-            SelectObject(hdc, oldPen);
-            DeleteObject(hGlow);
-        }
-
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, textColor);
-        SelectObject(hdc, hFontBold);
-
-        RECT textRc = rc;
-        if (isPressed) OffsetRect(&textRc, 0, 1);
-        DrawTextW(hdc, text.c_str(), -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-
-    void ThemeManager::DrawBadge(HDC hdc, int x, int y, const wchar_t* text, COLORREF bg, COLORREF border, COLORREF textCol, HFONT hFont) {
-        HFONT fontToUse = hFont ? hFont : hFontSmall;
-        HGDIOBJ oldFont = SelectObject(hdc, fontToUse);
-        SIZE sz;
-        GetTextExtentPoint32W(hdc, text, (int)wcslen(text), &sz);
-        RECT br = { x, y, x + sz.cx + 12, y + sz.cy + 4 };
-        FillRoundedRect(hdc, br, 4, bg, border);
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, textCol);
-        RECT tr = br;
-        DrawTextW(hdc, text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(hdc, oldFont);
-    }
-
-    void ThemeManager::DrawCard(HDC hdc, const RECT& rc, const wchar_t* title, const wchar_t* badge, COLORREF accentColor) {
-        // Fill card background
-        FillRoundedRect(hdc, rc, 10, BG_CARD, BORDER_COLOR);
-
-        // Accent indicator bar on left edge
-        HBRUSH hAccent = CreateSolidBrush(accentColor);
-        RECT accentBar = { rc.left + 2, rc.top + 10, rc.left + 5, rc.top + 28 };
-        FillRect(hdc, &accentBar, hAccent);
-        DeleteObject(hAccent);
-
-        // Title
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, accentColor);
-        SelectObject(hdc, hFontBold);
-        TextOutW(hdc, rc.left + 12, rc.top + 10, title, (int)wcslen(title));
-
-        // Optional badge on top-right
-        if (badge && badge[0]) {
-            SIZE bsz;
-            SelectObject(hdc, hFontSmall);
-            GetTextExtentPoint32W(hdc, badge, (int)wcslen(badge), &bsz);
-            int bx = rc.right - bsz.cx - 22;
-            DrawBadge(hdc, bx, rc.top + 8, badge, BG_SURFACE, accentColor, accentColor, hFontSmall);
-        }
-    }
-
-    void ThemeManager::RenderHeroButton(LPDRAWITEMSTRUCT dis, const std::wstring& text, bool isDisabled) {
-        HDC hdc = dis->hDC;
-        RECT rc = dis->rcItem;
-        bool isPressed = (dis->itemState & ODS_SELECTED) != 0;
-
-        if (isDisabled) {
-            FillRoundedRect(hdc, rc, 8, BG_CARD, BORDER_SUBTLE);
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, TEXT_MUTED);
-            SelectObject(hdc, hFontTitle);
-            RECT tr = rc;
-            DrawTextW(hdc, text.c_str(), -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            return;
-        }
-
-        COLORREF topCol, botCol, borderCol;
-        if (isPressed) {
-            topCol = RGB(16, 120, 56);
-            botCol = RGB(12, 85, 40);
-            borderCol = ACCENT_GREEN;
-        } else {
-            topCol = RGB(34, 180, 88);
-            botCol = RGB(20, 130, 62);
-            borderCol = RGB(52, 211, 120);
-        }
-
-        DrawGradientRect(hdc, rc, topCol, botCol);
-
-        // Outer border
-        HPEN hPen = CreatePen(PS_SOLID, 1, borderCol);
-        HGDIOBJ oldPen = SelectObject(hdc, hPen);
-        SelectObject(hdc, GetStockObject(NULL_BRUSH));
-        RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, 8, 8);
-        SelectObject(hdc, oldPen);
-        DeleteObject(hPen);
-
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        SelectObject(hdc, hFontTitle);
-
-        RECT textRc = rc;
-        if (isPressed) OffsetRect(&textRc, 0, 1);
-        DrawTextW(hdc, text.c_str(), -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        g.DrawLine(&pen, p1, p2);
+        g.DrawLine(&pen, p2, p3);
     }
 }
-

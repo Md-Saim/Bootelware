@@ -36,12 +36,13 @@ target_link_libraries(Bootelware PRIVATE
     comctl32
     setupapi
     msimg32
+    gdiplus
 )
 
 # Compiler optimization options
 if(MSVC)
     target_compile_options(Bootelware PRIVATE /W3 /permissive- /utf-8)
     set_target_properties(Bootelware PROPERTIES
-        LINK_FLAGS "/MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\""
+        LINK_FLAGS "/MANIFESTUAC:\"level='asInvoker' uiAccess='false'\""
     )
 endif()

@@ -45,6 +45,31 @@ public:
         std::wstring& outError
     );
 
+    static bool FormatFat32Large(
+        const std::wstring& driveLetter,
+        const std::wstring& label,
+        DWORD clusterSize,
+        WriteLogCallback logCb,
+        std::wstring& outError
+    );
+
+    static bool FormatStandaloneDrive(
+        const std::wstring& driveLetter,
+        const std::wstring& fsType,
+        const std::wstring& label,
+        DWORD clusterSize,
+        bool quickFormat,
+        WriteProgressCallback progressCb,
+        WriteLogCallback logCb,
+        std::atomic<bool>& cancelFlag,
+        std::wstring& outError
+    );
+
+    static bool EjectDrive(
+        const std::wstring& driveLetter,
+        std::wstring& outError
+    );
+
     static bool CheckBadBlocks(
         DWORD physicalDriveIndex,
         int passes,

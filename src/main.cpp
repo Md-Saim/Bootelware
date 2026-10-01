@@ -18,6 +18,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         pfnSetDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
 
+    // Export screenshots mode
+    if (wcsstr(GetCommandLineW(), L"export-screens")) {
+        MainWindow::ExportScreenshots(L"assets\\screenshots");
+        return 0;
+    }
+
     // 3. Register and create Main Window
     if (!MainWindow::Register(hInstance)) {
         MessageBoxW(NULL, L"Failed to register Bootelware window class.", L"Bootelware - Fatal Error", MB_OK | MB_ICONERROR);
