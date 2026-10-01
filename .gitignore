@@ -1,0 +1,26 @@
+# Build outputs and intermediate files
+build/
+bin/
+out/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.idb
+*.tlog
+*.lastbuildstate
+*.log
+
+# Visual Studio / IDE temporary files
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+CMakeSettings.json
+
+# Windows temporary files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

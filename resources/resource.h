@@ -1,0 +1,14 @@
+#pragma once
+
+#define IDI_APP_ICON            101
+#define IDD_MAIN_DIALOG         102
+#define IDD_WIN11_OPTS_DIALOG   103
+#define IDD_CHECKSUM_DIALOG     104
+#define IDD_DOWNLOAD_DIALOG     105
+
+#ifndef CREATEPROCESS_MANIFEST_RESOURCE_ID
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+#endif
+#ifndef RT_MANIFEST
+#define RT_MANIFEST 24
+#endif
